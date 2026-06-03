@@ -1,157 +1,147 @@
-# 🔔 Akıllı Kapı Zili — Yüz Tanımalı (ESP32 + Python)
+# 🔔 Smart Doorbell — with Face Recognition (ESP32 + Python)
 
-Kapıya biri yaklaşınca ultrasonik sensör tetiklenir, bilgisayar webcam'den
-yüz tanıma yapar; **tanıdıksa yeşil**, **yabancıysa kırmızı** LED yanar.
+When someone approaches the door, the ultrasonic sensor triggers. The computer then runs face recognition using the webcam; if it's a **known person**, the LED ring turns **green**, if it's a **stranger**, it turns **red**.
 
-> 📚 **Hızlı başlangıç:** Sıfırdan kurulum → **[KURULUM.md](KURULUM.md)** · Günlük kullanım (yüz ekleme, başlatma) → **[KULLANIM.md](KULLANIM.md)**
+> 📚 **Quick Start:** For scratch setup → **[SETUP.md](SETUP.md)** · For daily usage (adding faces, running) → **[USAGE.md](USAGE.md)**
 
-## Çalışma Mantığı
+## How it Works
 
 ```
-[HC-SR04]  →  ESP32  →  (USB Seri)  →  Bilgisayar (Python + Webcam)
+[HC-SR04]  →  ESP32  →  (USB Serial)  →  PC (Python + Webcam)
                  ↑                              │
-                 │                         Yüz tanıma
+                 │                       Face recognition
                  │                              │
-        Yeşil/Kırmızı LED  ←─ "GREEN"/"RED" ───┘
+        Green/Red LED  ←─ "GREEN"/"RED" ────────┘
 ```
 
-## Klasör Yapısı
+## Folder Structure
 
 ```
 Ai Project/
 ├── esp32/
-│   └── main.py          # ESP32'ye yüklenecek (MicroPython)
+│   └── main.py              # MicroPython code for ESP32
 ├── pc/
-│   ├── doorbell.py          # Ana program (--test modu + seri + yüz tanıma)
-│   ├── enroll.py            # Webcam ile tanıdık yüz ekleme aracı
-│   ├── kurulum.ps1          # PC kurulum scripti (.venv + paketler)
-│   ├── dogrula_kurulum.py   # Kurulum doğrulama
+│   ├── doorbell.py          # Main program (--test mode + serial + face recognition)
+│   ├── enroll.py            # Tool to add known faces via webcam
+│   ├── setup.ps1            # PC setup script (.venv + dependencies)
+│   ├── verify_setup.py      # Installation verification
 │   └── requirements.txt
-├── known_faces/         # Tanıdık kişilerin fotoğrafları
+├── known_faces/             # Photos of known people
+├── photos/                  # Other photos/diagrams
 └── README.md
 ```
 
 ---
 
-## 1) Donanım Bağlantıları (Kablolama)
+## 1) Hardware Connections (Wiring)
 
-> ℹ️ Pin numaraları **ESP32-S3** varsayımıyla yazıldı. Board kesinleşince
-> güncellenecek. Değiştirirsen `esp32/main.py` içindeki ayarları da güncelle.
+> ℹ️ Pin numbers are based on the **ESP32-S3**. If you change the pins, make sure to update `esp32/main.py`.
 
-### HC-SR04 (ultrasonik sensör)
-| HC-SR04 | Nereye | Not |
+### HC-SR04 (Ultrasonic Sensor)
+| HC-SR04 | To | Note |
 |---------|--------|-----|
-| VCC | ESP32 **5V (VIN)** | Sensör 5V ister |
-| GND | ESP32 **GND** | Ortak toprak |
-| Trig | ESP32 **GPIO 5** | Doğrudan (3.3V tetiklemeye yeter) |
-| Echo | **Logic Converter** → ESP32 **GPIO 4** | Echo 5V verir, düşürmek şart! |
+| VCC | ESP32 **5V (VIN)** | Sensor requires 5V |
+| GND | ESP32 **GND** | Common ground |
+| Trig | ESP32 **GPIO 5** | Direct connection (3.3V is enough to trigger) |
+| Echo | **Logic Converter** → ESP32 **GPIO 4** | Echo outputs 5V, step-down is required! |
 
-### Logic Level Converter (Echo'yu 5V → 3.3V düşürmek için)
-| Converter | Nereye |
+### Logic Level Converter (To step down Echo from 5V → 3.3V)
+| Converter | To |
 |-----------|--------|
 | HV | ESP32 **5V (VIN)** |
 | LV | ESP32 **3.3V** |
-| GND (her iki taraf) | ESP32 **GND** |
+| GND (both sides) | ESP32 **GND** |
 | HV1 | HC-SR04 **Echo** |
 | LV1 | ESP32 **GPIO 4** |
 
-### WS2812 RGB LED Halkası ("led ışık")
-| Halka | Nereye | Not |
+### WS2812 RGB LED Ring
+| Ring | To | Note |
 |-------|--------|-----|
-| 5V | ESP32 **5V (VIN)** | Halka 5V ister |
-| GND | ESP32 **GND** | Ortak toprak |
-| DI (Data In) | **330 Ω** → ESP32 **GPIO 6** | **Doğrudan** sür; titrerse halkayı 1N5819 diyot ile ~4.3 V besle |
-| DO (Data Out) | — | Boş kalsın (zincirleme için, gerekmez) |
+| 5V | ESP32 **5V (VIN)** | Ring requires 5V |
+| GND | ESP32 **GND** | Common ground |
+| DI (Data In) | **330 Ω** → ESP32 **GPIO 6** | **Direct drive**; if it flickers, supply the ring with ~4.3V using a 1N5819 diode |
+| DO (Data Out) | — | Leave disconnected (only needed for daisy-chaining) |
 
-> ⚠️ WS2812B data hattını **BSS138 logic converter'dan GEÇİRME** — 800 kbps için
-> uygun değil, renkler bozulur. BSS138'i sadece HC-SR04 Echo için kullan.
-> Detay: `esp32s3_donanim_raporu.md` Bölüm 3.
-> `main.py` içinde `NUM_PIXELS` değerini halkandaki LED sayısına göre ayarla.
+> ⚠️ **DO NOT pass the WS2812B data line through the BSS138 logic converter** — it is not suitable for 800 kbps, and colors will be corrupted. Only use the BSS138 for the HC-SR04 Echo.
+> Adjust `NUM_PIXELS` in `main.py` according to your LED count.
 
 ---
 
-## 2) ESP32 Kurulumu (MicroPython)
+## 2) ESP32 Setup (MicroPython)
 
-1. **MicroPython firmware**'ini ESP32'ye yükle (bir kerelik):
-   - [Thonny IDE](https://thonny.org/) indir → kur.
-   - Thonny → `Tools > Options > Interpreter` → "MicroPython (ESP32)" seç.
-   - Sağ alttan "Install or update MicroPython" → **board ailesini doğru seç!**
-     Board'un **ESP32-S3** ise "ESP32-S3" sürümünü yükle (normal "ESP32" değil).
-     Çift USB-C portu olan board'lar genelde ESP32-S3'tür.
-   - `neopixel` modülü MicroPython'da hazır gelir, ayrıca kurulum gerekmez.
-2. `esp32/main.py` dosyasını Thonny ile aç → **ESP32'ye `main.py` adıyla kaydet**
-   (`File > Save as > MicroPython device`). Böylece ESP32 her açılışta otomatik çalıştırır.
+1. Flash the **MicroPython firmware** to the ESP32 (one-time):
+   - Download and install [Thonny IDE](https://thonny.org/).
+   - Thonny → `Tools > Options > Interpreter` → Select "MicroPython (ESP32)".
+   - Click "Install or update MicroPython" at the bottom right → **select the correct board family!**
+     If your board is **ESP32-S3**, install the "ESP32-S3" version (not the regular "ESP32").
+   - The `neopixel` module comes built-in with MicroPython.
+2. Open `esp32/main.py` in Thonny → **Save it to the ESP32 as `main.py`**
+   (`File > Save as > MicroPython device`). This ensures the ESP32 runs it automatically on boot.
 
-> Kod çalışırken REPL'i durdurmak için Thonny'de **Stop/Restart (Ctrl+C)**.
+> To stop the code and access REPL in Thonny, press **Stop/Restart (Ctrl+C)**.
 
 ---
 
-## 3) Bilgisayar Kurulumu (Python) — Conda GEREKMEZ
+## 3) PC Setup (Python) — Conda NOT Required
 
-> Python **3.10+** ve pip yeterli. `dlib`'i önceden derlenmiş (`dlib-bin`) kuruyoruz;
-> Visual Studio / derleme derdi YOK. Tek komutla kur:
+> Python **3.10+** and pip are sufficient. We use a pre-built `dlib` package (`dlib-bin`);
+> NO need for Visual Studio or compiling. Install with one command:
 
 ```powershell
-# Proje KÖK dizininde çalıştır:
-powershell -ExecutionPolicy Bypass -File pc\kurulum.ps1
+# Run this in the project ROOT directory:
+powershell -ExecutionPolicy Bypass -File pc\setup.ps1
 ```
-Bu script otomatik olarak `.venv` sanal ortamını oluşturur (sistemdeki Python ile) ve `dlib-bin`,
-`face_recognition`, `opencv`, `pyserial` vb. paketleri **doğru sırada** kurar.
+This script automatically creates a `.venv` virtual environment (using the system Python) and installs `dlib-bin`, `face_recognition`, `opencv`, `pyserial`, etc. in the **correct order**.
 
-Kurulumu doğrula:
+Verify the installation:
 ```powershell
-.\.venv\Scripts\python.exe pc\dogrula_kurulum.py
+.\.venv\Scripts\python.exe pc\verify_setup.py
 ```
-> ℹ️ "dlib>=19.7 not installed" uyarısı **zararsızdır** (modülün adı `dlib`,
-> paketin adı `dlib-bin`). `import dlib` sorunsuz çalışır.
+> ℹ️ The "dlib>=19.7 not installed" warning is **harmless** (the module name is `dlib`, but the package is `dlib-bin`). `import dlib` works perfectly.
 
 ---
 
-## 4) Tanıdık Yüzleri Ekle
+## 4) Add Known Faces
 
-`known_faces/` boşken kameraya çıkan **herkes "yabancı"** sayılır. Önce kendini ekle:
+When `known_faces/` is empty, **everyone** on camera is considered a "stranger". Add yourself first:
 ```powershell
-.\.venv\Scripts\python.exe pc\enroll.py yakup    # kameraya bak, [s] ile kaydet
+.\.venv\Scripts\python.exe pc\enroll.py john    # Look at the camera, press [s] to save
 ```
-veya `known_faces/` klasörüne elle `isim.jpg` koy.
+Alternatively, you can manually place a `name.jpg` file inside the `known_faces/` directory.
 
 ---
 
-## 5) Çalıştır
+## 5) Run
 
-### a) ESP32 OLMADAN test et (önce bunu dene)
+### a) Test WITHOUT ESP32 (Try this first)
 ```powershell
 .\.venv\Scripts\python.exe pc\doorbell.py --test
 ```
-Canlı kamera açılır; **[SPACE]** → yüz kontrol (TANIDIK/YABANCI gösterir), **[q]** → çık.
-Donanım hazır olmadan PC tarafını tam test etmek için bunu kullan.
+The live camera will open; press **[SPACE]** to trigger face check (shows KNOWN/STRANGER), press **[q]** to quit. Use this to fully test the PC side before the hardware is ready.
 
-### b) ESP32 ile (donanım hazır olunca)
+### b) With ESP32 (When hardware is ready)
 ```powershell
-# ESP32'nin COM portunu argüman olarak ver (Aygıt Yöneticisi'nden bak):
+# Provide the ESP32's COM port as an argument (Check Device Manager):
 .\.venv\Scripts\python.exe pc\doorbell.py COM5
 ```
-Artık sensöre yaklaşınca → kamera kontrol eder → LED yanar. 🎉
+Now, when someone approaches the sensor → the camera checks the face → the LED lights up. 🎉
 
 ---
 
-## Test Sırası (parça parça doğrula)
+## Testing Order (Verify piece by piece)
 
-1. **RGB halka testi:** Thonny REPL'de:
+1. **RGB Ring test:** In Thonny REPL:
    ```python
    import neopixel
    from machine import Pin
    r = neopixel.NeoPixel(Pin(6), 8)
-   r.fill((0, 40, 0)); r.write()   # yeşil yanmalı
+   r.fill((0, 40, 0)); r.write()   # Should light up green
    ```
-2. **Sensör testi:** `main.py` içine geçici `print(dist)` ekleyip mesafe oku.
-3. **Kamera testi:** `python enroll.py test` → kamera açılıyor mu?
-4. **Yüz tanıma testi:** `doorbell.py`'yi çalıştır, COM portunu kapatıp
-   sadece kamera kısmını dene (istersen elle "RING" tetikleriz).
-5. **Tam entegrasyon:** Hepsi bağlıyken sensöre yaklaş.
+2. **Sensor test:** Temporarily add `print(dist)` in `main.py` to read distance.
+3. **Camera test:** `python enroll.py test` → Does the camera open?
+4. **Face recognition test:** Run `doorbell.py --test` and trigger manually using the SPACE bar.
+5. **Full integration:** With everything connected, approach the sensor.
 
-## İnce Ayarlar
-- `main.py` → `DISTANCE_THRESHOLD_CM`: kaç cm'den tetiklensin.
-- `doorbell.py` → `TOLERANCE`: 0.5 sıkı / 0.6 gevşek. Yabancıyı tanıdık
-  sanıyorsa düşür; tanıdığı tanımıyorsa yükselt.
-# ESP32-Smart-Doorbell-AI
+## Fine Tuning
+- `main.py` → `DISTANCE_THRESHOLD_CM`: distance to trigger the bell.
+- `doorbell.py` → `TOLERANCE`: 0.5 strict / 0.6 loose. If it thinks a stranger is known, lower it; if it doesn't recognize a known person, raise it.

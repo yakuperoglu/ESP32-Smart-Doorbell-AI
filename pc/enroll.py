@@ -1,14 +1,14 @@
 # =============================================================
-#  TANIDIK YUZ EKLEME ARACI
+#  KNOWN FACE ENROLLMENT TOOL
 # =============================================================
-#  Webcam acar, canli goruntu gosterir.
-#    [s] -> o anki kareyi known_faces/<isim>.jpg olarak kaydeder
-#           (KAYDETMEDEN ONCE karede yuz var mi kontrol eder)
-#    [q] -> cikar
+#  Opens the webcam and displays a live feed.
+#    [s] -> saves the current frame as known_faces/<name>.jpg
+#           (Checks if a face is in the frame BEFORE SAVING)
+#    [q] -> quits
 #
-#  Kullanim:
-#     python enroll.py yakup
-#  (kaydedecegin kisinin adini arguman olarak ver)
+#  Usage:
+#     python enroll.py john
+#  (Provide the name of the person as an argument)
 # =============================================================
 
 import os
@@ -23,8 +23,8 @@ KNOWN_DIR = os.path.join(os.path.dirname(__file__), "..", "known_faces")
 
 def main():
     if len(sys.argv) < 2:
-        print("Kullanim: python enroll.py <isim>")
-        print("Ornek:    python enroll.py yakup")
+        print("Usage: python enroll.py <name>")
+        print("Example: python enroll.py john")
         return
 
     name = sys.argv[1]
@@ -33,11 +33,11 @@ def main():
 
     cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        print("[!] Kamera acilamadi. (CAMERA_INDEX'i 1/2 yapmayi dene.)")
+        print("[!] Cannot open camera. (Try changing CAMERA_INDEX to 1 or 2.)")
         return
 
-    print("Kameraya bak. Kaydetmek icin [s], cikmak icin [q].")
-    info, color = "[s] kaydet   [q] cik", (200, 200, 200)
+    print("Look at the camera. Press [s] to save, [q] to quit.")
+    info, color = "[s] save   [q] quit", (200, 200, 200)
 
     while True:
         ret, frame = cap.read()
@@ -46,21 +46,21 @@ def main():
 
         disp = frame.copy()
         cv2.putText(disp, info, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-        cv2.imshow("Yuz Ekle - [s] kaydet, [q] cik", disp)
+        cv2.imshow("Add Face - [s] save, [q] quit", disp)
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord("s"):
-            # Kaydetmeden once karede gercekten yuz var mi kontrol et
+            # Check if there's actually a face in the frame before saving
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             if not face_recognition.face_locations(rgb):
-                print("[!] Karede yuz bulunamadi, KAYDEDILMEDI. Isiga/aciya dikkat et, tekrar dene.")
-                info, color = "Yuz bulunamadi - tekrar dene", (0, 0, 255)
+                print("[!] No face found in the frame, NOT SAVED. Check lighting/angle and try again.")
+                info, color = "No face found - try again", (0, 0, 255)
                 continue
             cv2.imwrite(save_path, frame)
-            print(f"[+] Kaydedildi: {save_path}")
+            print(f"[+] Saved: {save_path}")
             break
         elif key == ord("q"):
-            print("[i] Iptal edildi.")
+            print("[i] Cancelled.")
             break
 
     cap.release()

@@ -1,45 +1,45 @@
 # =============================================================
-#  Akilli Kapi Zili - PC Kurulum Scripti
-#  (Windows, Conda YOK, Python 3.10+)
+#  Smart Doorbell - PC Setup Script
+#  (Windows, NO Conda, Python 3.10+)
 # =============================================================
-#  Proje KOK dizininde calistir:
-#     powershell -ExecutionPolicy Bypass -File pc\kurulum.ps1
+#  Run in the project ROOT directory:
+#     powershell -ExecutionPolicy Bypass -File pc\setup.ps1
 #
-#  Yaptiklari:
-#   - .venv sanal ortami olusturur
-#   - dlib'i ONCEDEN DERLENMIS halde kurar (derleme/Visual Studio derdi yok)
-#   - face_recognition'i dlib'i tekrar derlemeden (--no-deps) kurar
-#   - opencv, pyserial vb. kurar
+#  What it does:
+#   - Creates a .venv virtual environment
+#   - Installs a PREBUILT version of dlib (no compiling/Visual Studio needed)
+#   - Installs face_recognition without reinstalling/compiling dlib (--no-deps)
+#   - Installs opencv, pyserial, etc.
 # =============================================================
 $ErrorActionPreference = "Stop"
 $py = ".\.venv\Scripts\python.exe"
 
-Write-Host "[1/6] Sanal ortam (.venv) olusturuluyor..." -ForegroundColor Cyan
+Write-Host "[1/7] Creating virtual environment (.venv)..." -ForegroundColor Cyan
 if (-not (Test-Path ".venv")) { python -m venv .venv }
 
-Write-Host "[2/6] pip guncelleniyor..." -ForegroundColor Cyan
+Write-Host "[2/7] Upgrading pip..." -ForegroundColor Cyan
 & $py -m pip install --upgrade pip
 
-Write-Host "[3/6] numpy kuruluyor..." -ForegroundColor Cyan
+Write-Host "[3/7] Installing numpy..." -ForegroundColor Cyan
 & $py -m pip install numpy
 
-Write-Host "[4/6] dlib (prebuilt - DERLEME YOK) kuruluyor..." -ForegroundColor Cyan
+Write-Host "[4/7] Installing dlib (prebuilt - NO COMPILATION)..." -ForegroundColor Cyan
 & $py -m pip install dlib-bin
 
-Write-Host "[5/7] face_recognition + modelleri kuruluyor..." -ForegroundColor Cyan
+Write-Host "[5/7] Installing face_recognition + models..." -ForegroundColor Cyan
 & $py -m pip install setuptools face_recognition_models click Pillow
 & $py -m pip install --no-deps face_recognition
 
-Write-Host "[6/7] opencv + pyserial + ESP32 araclari (esptool, mpremote) kuruluyor..." -ForegroundColor Cyan
+Write-Host "[6/7] Installing opencv + pyserial + ESP32 tools (esptool, mpremote)..." -ForegroundColor Cyan
 & $py -m pip install opencv-python pyserial esptool mpremote
 
-# Python 3.14+ uyumluluk yamasi: face_recognition_models pkg_resources yerine os.path kullansin
-Write-Host "[7/7] Python 3.14+ uyumluluk kontrolu..." -ForegroundColor Cyan
+# Python 3.14+ compatibility patch: face_recognition_models use os.path instead of pkg_resources
+Write-Host "[7/7] Checking Python 3.14+ compatibility..." -ForegroundColor Cyan
 $modelsInit = ".\.venv\Lib\site-packages\face_recognition_models\__init__.py"
 if (Test-Path $modelsInit) {
     $content = Get-Content $modelsInit -Raw
     if ($content -match "pkg_resources") {
-        Write-Host "  face_recognition_models yamalaniyor (pkg_resources -> os.path)..." -ForegroundColor Yellow
+        Write-Host "  Patching face_recognition_models (pkg_resources -> os.path)..." -ForegroundColor Yellow
         $patched = @"
 # -*- coding: utf-8 -*-
 __author__ = '''Adam Geitgey'''
@@ -62,12 +62,12 @@ def cnn_face_detector_model_location():
     return _os.path.join(_models_dir, "mmod_human_face_detector.dat")
 "@
         Set-Content -Path $modelsInit -Value $patched -Encoding UTF8
-        Write-Host "  Yama uygulandi." -ForegroundColor Green
+        Write-Host "  Patch applied successfully." -ForegroundColor Green
     } else {
-        Write-Host "  Yama gereksiz, zaten uyumlu." -ForegroundColor Green
+        Write-Host "  Patch not needed, already compatible." -ForegroundColor Green
     }
 }
 
 Write-Host ""
-Write-Host "BITTI! Dogrulama icin:" -ForegroundColor Green
-Write-Host "   .\.venv\Scripts\python.exe pc\dogrula_kurulum.py"
+Write-Host "DONE! To verify the installation:" -ForegroundColor Green
+Write-Host "   .\.venv\Scripts\python.exe pc\verify_setup.py"

@@ -1,17 +1,17 @@
 # =============================================================
-#  NEOPIXEL HALKA TESTI
+#  NEOPIXEL RING TEST
 # =============================================================
-#  Bilgisayardan calistir (kart USB'de takiliyken):
+#  Run from PC (while board is plugged into USB):
 #     .\.venv\Scripts\python.exe -m mpremote connect COM10 run esp32\test_neopixel.py
 #
-#  Kablolama:  Halka 5V->ESP32 5V,  GND->GND,  DI->GPIO6 (istege bagli 330ohm seri)
+#  Wiring:     Ring 5V->ESP32 5V,  GND->GND,  DI->GPIO6 (optional 330ohm series resistor)
 # =============================================================
 import neopixel
 import machine
 import time
 
-PIN = 6      # NeoPixel DI pini
-N = 8        # halkadaki LED sayisi
+PIN = 6      # NeoPixel DI pin
+N = 8        # Number of LEDs in the ring
 
 ring = neopixel.NeoPixel(machine.Pin(PIN), N)
 
@@ -22,17 +22,17 @@ def fill(c):
     ring.write()
 
 
-print("Yesil...")
+print("Green...")
 fill((0, 40, 0))
 time.sleep(2)
 
-print("Kirmizi...")
+print("Red...")
 fill((40, 0, 0))
 time.sleep(2)
 
-print("Mavi...")
+print("Blue...")
 fill((0, 0, 40))
 time.sleep(2)
 
 fill((0, 0, 0))
-print("NeoPixel test bitti. Renkler DOGRU yandiysa (yesil/kirmizi/mavi) halka TAMAM.")
+print("NeoPixel test finished. If the colors were CORRECT (green/red/blue), the ring is GOOD.")

@@ -1,15 +1,15 @@
 # =============================================================
-#  AKILLI KAPI ZİLİ - ESP32 (MicroPython) tarafı
+#  SMART DOORBELL - ESP32 (MicroPython) side
 # =============================================================
-#  Görevi:
-#   1) HC-SR04 ultrasonik sensör ile kapıya biri yaklaştı mı bak
-#   2) Yaklaşan varsa bilgisayara "RING" sinyali gönder (USB seri)
-#   3) Bilgisayardan gelen sonucu bekle:
-#         "GREEN" -> tanıdık  -> RGB halka YEŞİL yansın
-#         "RED"   -> yabancı  -> RGB halka KIRMIZI yansın
+#  Task:
+#   1) Check if someone is approaching via HC-SR04 ultrasonic sensor
+#   2) If someone is approaching, send "RING" signal to PC (USB serial)
+#   3) Wait for result from PC:
+#         "GREEN" -> known person  -> RGB ring turns GREEN
+#         "RED"   -> stranger      -> RGB ring turns RED
 #
-#  NOT: LED olarak tek bir WS2812 (NeoPixel) RGB HALKA kullanıyoruz.
-#       Tek data kablosuyla istediğimiz rengi veririz.
+#  NOTE: We use a single WS2812 (NeoPixel) RGB RING for the LED.
+#        We can set any color with a single data wire.
 # =============================================================
 
 import sys
@@ -18,23 +18,23 @@ import uselect
 import neopixel
 from machine import Pin, time_pulse_us
 
-# ---------------------- PİN AYARLARI -------------------------
-# (ESP32-S3 varsayıldı. Board'u kesinleştirince güncelleriz.)
-TRIG_PIN      = 5    # HC-SR04 Trig  -> doğrudan ESP32'ye
-ECHO_PIN      = 4    # HC-SR04 Echo  -> LOGIC CONVERTER üzerinden ESP32'ye
-NEOPIXEL_PIN  = 6    # RGB halkanın DI (Data In) pini
-NUM_PIXELS    = 8    # Halkadaki LED sayısı (azsa/çoksa burayı değiştir)
+# ---------------------- PIN SETTINGS -------------------------
+# (Assuming ESP32-S3. We'll update once the board is finalized.)
+TRIG_PIN      = 5    # HC-SR04 Trig  -> directly to ESP32
+ECHO_PIN      = 4    # HC-SR04 Echo  -> to ESP32 via LOGIC CONVERTER
+NEOPIXEL_PIN  = 6    # RGB ring DI (Data In) pin
+NUM_PIXELS    = 8    # Number of LEDs in the ring (change if yours is different)
 
-# Kaç cm'den yakına biri gelirse "kapıda biri var" sayalım
+# Distance in cm to consider "someone is at the door"
 DISTANCE_THRESHOLD_CM = 50
 
-# Zilin sürekli çalmaması için bekleme süresi (ms)
+# Cooldown time (ms) to prevent continuous ringing
 COOLDOWN_MS = 5000
 
-# Bilgisayardan sonuç gelmesini en fazla kaç ms bekleyelim
+# Max wait time (ms) for PC response
 RESULT_TIMEOUT_MS = 8000
 
-# Renkler (parlaklık düşük tutuldu ki USB'den çok akım çekmesin)
+# Colors (brightness kept low to avoid pulling too much current from USB)
 GREEN  = (0, 40, 0)
 RED    = (40, 0, 0)
 BLUE   = (0, 0, 40)
@@ -45,13 +45,13 @@ trig = Pin(TRIG_PIN, Pin.OUT)
 echo = Pin(ECHO_PIN, Pin.IN)
 ring = neopixel.NeoPixel(Pin(NEOPIXEL_PIN, Pin.OUT), NUM_PIXELS)
 
-# USB seri porttan (REPL) gelen veriyi bloklamadan okumak için
+# For non-blocking read from USB serial port (REPL)
 _poller = uselect.poll()
 _poller.register(sys.stdin, uselect.POLLIN)
 
 
 def fill(color):
-    """Tüm halkayı tek renge boya."""
+    """Fill the entire ring with a single color."""
     for i in range(NUM_PIXELS):
         ring[i] = color
     ring.write()
@@ -61,28 +61,28 @@ fill(OFF)
 
 
 def measure_distance_cm():
-    """HC-SR04 ile mesafeyi cm cinsinden ölç. Okuyamazsa None döner."""
+    """Measure distance in cm using HC-SR04. Returns None if it fails."""
     trig.value(0)
     time.sleep_us(2)
     trig.value(1)
     time.sleep_us(10)
     trig.value(0)
 
-    # Echo pininin ne kadar süre HIGH kaldığını ölç (timeout ~ 30 ms = ~5 m)
+    # Measure how long the Echo pin stays HIGH (timeout ~ 30 ms = ~5 m)
     duration = time_pulse_us(echo, 1, 30000)
     if duration < 0:
-        return None  # zaman aşımı / sensör cevap vermedi
+        return None  # timeout / sensor didn't respond
 
-    # Sesin hızı: 0.0343 cm/us. Gidiş-dönüş olduğu için 2'ye böl.
+    # Speed of sound: 0.0343 cm/us. Divide by 2 for round-trip.
     return (duration * 0.0343) / 2
 
 
 def read_line(timeout_ms):
-    """Bilgisayardan bir satır oku (\\n'e kadar). Süre dolarsa '' döner."""
+    """Read a line from PC (until \\n). Returns '' if timeout."""
     buf = ""
     deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
     while time.ticks_diff(deadline, time.ticks_ms()) > 0:
-        if _poller.poll(50):                 # 50 ms boyunca veri var mı bak
+        if _poller.poll(50):                 # Check if data available for 50 ms
             ch = sys.stdin.read(1)
             if ch == "\n" or ch == "":
                 break
@@ -92,14 +92,14 @@ def read_line(timeout_ms):
 
 
 def show_result(color, seconds=3):
-    """Halkayı belirtilen renkte belirtilen süre kadar yak, sonra söndür."""
+    """Light up the ring with the given color for 'seconds', then turn off."""
     fill(color)
     time.sleep(seconds)
     fill(OFF)
 
 
 def startup_blink():
-    """Açılışta mavi yanıp sönerek 'hazırım' de."""
+    """Blink blue on startup to indicate 'ready'."""
     for _ in range(2):
         fill(BLUE)
         time.sleep_ms(150)
@@ -107,9 +107,9 @@ def startup_blink():
         time.sleep_ms(150)
 
 
-# -------------------------- ANA DÖNGÜ ------------------------
+# -------------------------- MAIN LOOP ------------------------
 startup_blink()
-print("BOOT")  # Bilgisayar tarafı bu satırı görünce bağlantının kurulduğunu anlar
+print("BOOT")  # The PC side sees this and knows connection is established
 
 last_ring = time.ticks_ms() - COOLDOWN_MS
 
@@ -121,18 +121,18 @@ while True:
         if time.ticks_diff(now, last_ring) > COOLDOWN_MS:
             last_ring = now
 
-            # 1) Bilgisayara "kapıda biri var" de
+            # 1) Tell PC "someone is at the door"
             print("RING")
 
-            # 2) Yüz tanıma sonucunu bekle
+            # 2) Wait for face recognition result
             cmd = read_line(RESULT_TIMEOUT_MS)
 
             if cmd == "GREEN":
-                show_result(GREEN)      # tanıdık
+                show_result(GREEN)      # known
             elif cmd == "RED":
-                show_result(RED)        # yabancı
+                show_result(RED)        # stranger
             else:
-                # Cevap gelmedi / hata -> kısa kırmızı uyarı kırpıştır
+                # No response / error -> blink red shortly
                 for _ in range(3):
                     fill(RED)
                     time.sleep_ms(100)

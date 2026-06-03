@@ -1,20 +1,20 @@
 # =============================================================
-#  AKILLI KAPI ZILI - Bilgisayar (PC) tarafi
+#  SMART DOORBELL - PC side
 # =============================================================
-#  IKI CALISMA MODU:
+#  TWO OPERATION MODES:
 #
-#   1) TEST MODU (ESP32 GEREKMEZ):
+#   1) TEST MODE (ESP32 NOT REQUIRED):
 #        python doorbell.py --test
-#      Canli kamera onizlemesi acar. [SPACE] tusuna basinca yuz
-#      tanima yapar ve sonucu ekranda gosterir (GREEN/RED). Donanim
-#      hazir olmadan PC tarafini denemek icin BUNU kullan.
+#      Opens live camera preview. Press [SPACE] to trigger face
+#      recognition and show the result on screen (GREEN/RED). 
+#      Use this to test the PC side before hardware is ready.
 #
-#   2) NORMAL MOD (ESP32 ile):
+#   2) NORMAL MODE (with ESP32):
 #        python doorbell.py COM5
-#      ESP32'den seri "RING" bekler, webcam'den yuz tanir,
-#      tanidiksa "GREEN" yabanciysa "RED" geri gonderir.
-#      Port verilmezse sirasiyla: DOORBELL_PORT ortam degiskeni,
-#      sonra varsayilan COM3 kullanilir.
+#      Waits for "RING" over serial from ESP32, recognizes the face
+#      via webcam, returns "GREEN" if known, "RED" if stranger.
+#      If no port is given, it checks the DOORBELL_PORT environment 
+#      variable, then defaults to COM3.
 # =============================================================
 
 import os
@@ -25,53 +25,53 @@ import cv2
 import numpy as np
 import face_recognition
 
-# ----------------------- AYARLAR -----------------------------
-DEFAULT_PORT = "COM3"            # port verilmezse varsayilan
+# ----------------------- SETTINGS -----------------------------
+DEFAULT_PORT = "COM3"            # Default port if none provided
 BAUD = 115200
 KNOWN_DIR = os.path.join(os.path.dirname(__file__), "..", "known_faces")
-CAMERA_INDEX = 0                 # webcam 0; harici kamera varsa 1,2... dene
-WARMUP_FRAMES = 15               # kamera acilinca isinma (oto-pozlama otursun)
+CAMERA_INDEX = 0                 # webcam 0; try 1,2... for external cameras
+WARMUP_FRAMES = 15               # Camera warmup frames (for auto-exposure to settle)
 
-# Esik: mesafe bu degerin ALTINDAysa "tanidik". 0.6 gevsek, 0.5 siki (onerilir).
+# Threshold: Distance below this value is "known". 0.6 is loose, 0.5 is strict (recommended).
 TOLERANCE = 0.5
 
-# Gercek zil modunda kamerayi ekranda goster + sonucu birkac saniye beklet
+# In real doorbell mode, show the camera on screen + hold the result for a few seconds
 SHOW_WINDOW = True
-RESULT_HOLD_SEC = 3      # tanima sonucu ekranda kac saniye dursun (cok hizli gecmesin)
+RESULT_HOLD_SEC = 3      # How many seconds the recognition result stays on screen
 # -------------------------------------------------------------
 
 
 def load_known_faces():
-    """known_faces/ klasorundeki fotograflari yukle, yuz kodlarini cikar."""
+    """Load photos from known_faces/ directory and extract face encodings."""
     encodings, names = [], []
 
     if not os.path.isdir(KNOWN_DIR):
-        print(f"[!] '{KNOWN_DIR}' klasoru yok. Tanidik fotograflari oraya koy.")
+        print(f"[!] '{KNOWN_DIR}' directory is missing. Place known photos there.")
         return encodings, names
 
     for fname in os.listdir(KNOWN_DIR):
         if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
             continue
         path = os.path.join(KNOWN_DIR, fname)
-        image = face_recognition.load_image_file(path)   # PIL ile RGB'ye cevirir
+        image = face_recognition.load_image_file(path)   # Loads as RGB via PIL
         face_encs = face_recognition.face_encodings(image)
         if face_encs:
             encodings.append(face_encs[0])
             names.append(os.path.splitext(fname)[0])
-            print(f"[+] Yuklendi: {fname}")
+            print(f"[+] Loaded: {fname}")
         else:
-            print(f"[!] Yuz bulunamadi, atlandi: {fname}")
+            print(f"[!] No face found, skipping: {fname}")
 
-    print(f"[i] Toplam {len(encodings)} tanidik yuz yuklendi.")
+    print(f"[i] Total {len(encodings)} known faces loaded.")
     if not encodings:
-        print("[!] UYARI: known_faces bos -> kameraya cikan HERKES 'yabanci' (RED) sayilir.")
-        print("    Once tanidik yuz ekle:  python pc\\enroll.py <isim>")
+        print("[!] WARNING: known_faces is empty -> EVERYONE on camera will be a 'stranger' (RED).")
+        print("    First, add a known face:  python pc\\enroll.py <name>")
     return encodings, names
 
 
 def open_camera():
-    """Webcam'i bir kez ac ve isit (oto-pozlama/odak otursun)."""
-    cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)  # Windows'ta DSHOW hizli acilir
+    """Open the webcam once and let it warm up (auto-exposure/focus settles)."""
+    cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)  # DSHOW opens faster on Windows
     if not cap.isOpened():
         return None
     for _ in range(WARMUP_FRAMES):
@@ -81,7 +81,7 @@ def open_camera():
 
 
 def grab_frame(cap):
-    """Acik kameradan TAZE bir kare al (tampondaki eski kareleri at)."""
+    """Grab a FRESH frame from the open camera (discards old buffered frames)."""
     frame = None
     for _ in range(5):
         ret, frame = cap.read()
@@ -93,9 +93,9 @@ def grab_frame(cap):
 
 
 def recognize(frame, known_encodings, known_names):
-    """Kareyi analiz et. Doner: (sonuc, isim, yuz_konumlari)
-       sonuc: 'known' | 'stranger' | 'none'
-       Birden cok yuz varsa EN IYI eslesmeye gore karar verir."""
+    """Analyze the frame. Returns: (result, name, face_locations)
+       result: 'known' | 'stranger' | 'none'
+       If there are multiple faces, makes a decision based on the BEST match."""
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     locations = face_recognition.face_locations(rgb)
     if not locations:
@@ -118,23 +118,23 @@ def recognize(frame, known_encodings, known_names):
 
 
 def resolve_port():
-    """Port: once komut satiri argumani, sonra DOORBELL_PORT, sonra DEFAULT_PORT."""
+    """Port resolution: Command line arg -> DOORBELL_PORT env var -> DEFAULT_PORT."""
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     if args:
         return args[0]
     return os.environ.get("DOORBELL_PORT", DEFAULT_PORT)
 
 
-# --------------------------- TEST MODU -----------------------
+# --------------------------- TEST MODE -----------------------
 def run_test_mode(known_encodings, known_names):
-    print("\n[TEST MODU] ESP32 gerekmez. Kamera aciliyor...")
+    print("\n[TEST MODE] ESP32 not required. Opening camera...")
     cap = open_camera()
     if cap is None:
-        print("[!] Kamera acilamadi. (CAMERA_INDEX'i 1/2 yapmayi dene.)")
+        print("[!] Cannot open camera. (Try changing CAMERA_INDEX to 1 or 2.)")
         return
 
-    print("Canli onizleme acildi.  [SPACE] = yuz kontrol et,  [q] = cik")
-    text, color = "Hazir - SPACE'e bas", (200, 200, 200)
+    print("Live preview opened.  [SPACE] = check face,  [q] = quit")
+    text, color = "Ready - Press SPACE", (200, 200, 200)
 
     while True:
         ret, frame = cap.read()
@@ -145,32 +145,32 @@ def run_test_mode(known_encodings, known_names):
 
         disp = frame.copy()
         cv2.putText(disp, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
-        cv2.imshow("Kapi Zili TEST - [SPACE] kontrol, [q] cik", disp)
+        cv2.imshow("Doorbell TEST - [SPACE] check, [q] quit", disp)
 
         key = cv2.waitKey(1) & 0xFF
-        if key in (ord("q"), 27):           # q veya ESC
+        if key in (ord("q"), 27):           # q or ESC
             break
-        if key == ord(" "):                  # SPACE -> yuz kontrol
+        if key == ord(" "):                  # SPACE -> check face
             result, name, _ = recognize(frame, known_encodings, known_names)
             if result == "known":
-                text, color = f"TANIDIK: {name}  -> GREEN", (0, 200, 0)
+                text, color = f"KNOWN: {name}  -> GREEN", (0, 200, 0)
             elif result == "stranger":
-                text, color = "YABANCI  -> RED", (0, 0, 255)
+                text, color = "STRANGER  -> RED", (0, 0, 255)
             else:
-                text, color = "Yuz gorunmuyor", (0, 165, 255)
+                text, color = "No face visible", (0, 165, 255)
             print(f"  -> {text}")
 
     cap.release()
     cv2.destroyAllWindows()
 
 
-# --------------------------- NORMAL MOD ----------------------
-def _annotate(frame, locations, etiket, color):
-    """Kareye yuz kutusu + sonuc yazisi cizip dondur."""
+# --------------------------- NORMAL MODE ----------------------
+def _annotate(frame, locations, label, color):
+    """Draw a bounding box and result text on the frame and return it."""
     disp = frame.copy()
     for (top, right, bottom, left) in locations:
         cv2.rectangle(disp, (left, top), (right, bottom), color, 2)
-    cv2.putText(disp, etiket, (10, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+    cv2.putText(disp, label, (10, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
     return disp
 
 
@@ -179,30 +179,30 @@ def run_serial_mode(known_encodings, known_names):
     from serial import SerialException
 
     port = resolve_port()
-    print(f"\n[i] {port} portuna baglaniliyor... (BAUD={BAUD})")
+    print(f"\n[i] Connecting to {port}... (BAUD={BAUD})")
     try:
-        # timeout=0 -> non-blocking okuma, boylece canli onizleme akici kalir
+        # timeout=0 -> non-blocking read, keeps live preview smooth
         ser = serial.Serial(port, BAUD, timeout=0)
     except SerialException as e:
-        print(f"[!] {port} acilamadi: {e}")
-        print("    - Dogru COM portu mu?  Ornek:  python doorbell.py COM5")
-        print("    - Thonny veya baska bir program portu tutuyor olabilir, kapat.")
+        print(f"[!] Cannot open {port}: {e}")
+        print("    - Is it the correct COM port?  Example:  python doorbell.py COM5")
+        print("    - Thonny or another program might be using the port, close them.")
         return
 
-    time.sleep(2)               # ESP32 reset olup acilana kadar bekle
-    ser.reset_input_buffer()    # bayat/birikmis veriyi temizle
+    time.sleep(2)               # Wait for ESP32 to reset and boot
+    ser.reset_input_buffer()    # Clear stale/buffered data
 
-    print("[i] Kamera aciliyor...")
+    print("[i] Opening camera...")
     cap = open_camera()
     if cap is None:
-        print("[!] Kamera acilamadi. Cikiliyor.")
+        print("[!] Cannot open camera. Exiting.")
         ser.close()
         return
 
-    print("[i] Hazir. ESP32'den 'RING' bekleniyor...")
-    print("    (Kamera penceresinde [q] = cik)")
+    print("[i] Ready. Waiting for 'RING' from ESP32...")
+    print("    (In the camera window, press [q] to quit)")
 
-    WIN = "Kapi Zili - canli (q=cik)"
+    WIN = "Doorbell - Live (q=quit)"
     buf = b""
     result_frame = None
     hold_until = 0.0
@@ -214,14 +214,14 @@ def run_serial_mode(known_encodings, known_names):
                 live = cv2.flip(live, 1)
             now = time.time()
 
-            # Ekran: sonuc bekletme suresindeysek donmus sonuc karesi,
-            # degilse canli goruntu + "bekleniyor" yazisi.
+            # Display: frozen result frame if within hold time,
+            # otherwise live feed + "waiting" text.
             if SHOW_WINDOW:
                 if result_frame is not None and now < hold_until:
                     disp = result_frame
                 elif ret:
                     disp = live.copy()
-                    cv2.putText(disp, "Bekleniyor - sensore yaklas", (10, 36),
+                    cv2.putText(disp, "Waiting - approach sensor", (10, 36),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (200, 200, 200), 2)
                 else:
                     disp = None
@@ -232,7 +232,7 @@ def run_serial_mode(known_encodings, known_names):
             else:
                 time.sleep(0.02)
 
-            # Seri porttan gelen satirlari oku (non-blocking)
+            # Read lines from serial port (non-blocking)
             data = ser.read(256)
             if not data:
                 continue
@@ -244,37 +244,37 @@ def run_serial_mode(known_encodings, known_names):
                     continue
 
                 if line == "RING":
-                    print("\n[ZIL] Kapida biri var! Yuz kontrol ediliyor...")
-                    # "kontrol ediliyor" geri bildirimi
+                    print("\n[RING] Someone is at the door! Checking face...")
+                    # "checking" visual feedback
                     if SHOW_WINDOW and ret:
                         tmp = live.copy()
-                        cv2.putText(tmp, "Kontrol ediliyor...", (10, 36),
+                        cv2.putText(tmp, "Checking...", (10, 36),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 200, 200), 2)
                         cv2.imshow(WIN, tmp)
                         cv2.waitKey(1)
 
                     frame = grab_frame(cap)
                     if frame is None:
-                        print("[!] Kamera karesi alinamadi -> yabanci.")
+                        print("[!] Failed to grab camera frame -> stranger.")
                         ser.write(b"RED\n")
                         continue
 
                     result, name, locations = recognize(frame, known_encodings, known_names)
                     if result == "known":
-                        print(f"[OK] TANIDIK: {name} -> yesil LED")
+                        print(f"[OK] KNOWN: {name} -> green LED")
                         ser.write(b"GREEN\n")
-                        result_frame = _annotate(frame, locations, f"TANIDIK: {name}", (0, 200, 0))
+                        result_frame = _annotate(frame, locations, f"KNOWN: {name}", (0, 200, 0))
                     elif result == "stranger":
-                        print("[NO] YABANCI -> kirmizi LED")
+                        print("[NO] STRANGER -> red LED")
                         ser.write(b"RED\n")
-                        result_frame = _annotate(frame, locations, "YABANCI", (0, 0, 255))
+                        result_frame = _annotate(frame, locations, "STRANGER", (0, 0, 255))
                     else:
-                        print("[??] Yuz gorunmuyor -> yabanci sayiliyor.")
+                        print("[??] No face visible -> treated as stranger.")
                         ser.write(b"RED\n")
-                        result_frame = _annotate(frame, locations, "Yuz yok", (0, 165, 255))
+                        result_frame = _annotate(frame, locations, "No face", (0, 165, 255))
                     hold_until = time.time() + RESULT_HOLD_SEC
                 else:
-                    # ESP32'nin diger mesajlari (BOOT vs.) - bilgi amacli
+                    # Other ESP32 messages (BOOT etc.) - for informational purposes
                     print(f"[esp32] {line}")
     finally:
         cap.release()
@@ -294,4 +294,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[i] Cikiliyor...")
+        print("\n[i] Exiting...")
