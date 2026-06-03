@@ -1,0 +1,6 @@
+opencv-python
+numpy
+pyserial
+face_recognition
+# Not: face_recognition, dlib'e ihtiyaç duyar.
+# Windows'ta dlib kurulumu için README.md'deki adımları izle.
