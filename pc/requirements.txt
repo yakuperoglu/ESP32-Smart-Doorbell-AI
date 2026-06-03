@@ -1,6 +1,23 @@
+# =============================================================
+#  PC tarafi Python bagimliliklari
+# =============================================================
+#  ONEMLI: dlib / face_recognition'in Windows'ta DOGRU kurulmasi icin
+#  paketlerin SIRALI kurulmasi gerekir. En kolay yol kurulum scripti:
+#
+#     powershell -ExecutionPolicy Bypass -File pc\kurulum.ps1
+#
+#  Bu script bir .venv olusturur ve asagidakileri dogru sirada kurar.
+#  (Python 3.10 + pip yeterli; Conda GEREKMEZ. dlib-bin = derleme yok.)
+# -------------------------------------------------------------
+numpy                    # numpy 2.x (2.2.6) test edildi: dlib-bin 20 + opencv 4.13 ile sorunsuz
+dlib-bin                 # onceden derlenmis dlib (Windows tekerlegi, derleme yok)
+face_recognition_models
+face_recognition         # kurulum scripti bunu "--no-deps" ile kurar (dlib'i tekrar derlemesin)
+click
+Pillow
 opencv-python
-numpy
 pyserial
-face_recognition
-# Not: face_recognition, dlib'e ihtiyaç duyar.
-# Windows'ta dlib kurulumu için README.md'deki adımları izle.
+
+# ESP32 firmware yukleme / dosya yonetimi araclari
+esptool                  # MicroPython firmware'ini karta yazmak icin
+mpremote                 # karta dosya kopyalama, REPL, test calistirma

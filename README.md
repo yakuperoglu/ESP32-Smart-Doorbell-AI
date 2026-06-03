@@ -3,6 +3,8 @@
 Kapıya biri yaklaşınca ultrasonik sensör tetiklenir, bilgisayar webcam'den
 yüz tanıma yapar; **tanıdıksa yeşil**, **yabancıysa kırmızı** LED yanar.
 
+> 📚 **Hızlı başlangıç:** Sıfırdan kurulum → **[KURULUM.md](KURULUM.md)** · Günlük kullanım (yüz ekleme, başlatma) → **[KULLANIM.md](KULLANIM.md)**
+
 ## Çalışma Mantığı
 
 ```
@@ -20,8 +22,10 @@ Ai Project/
 ├── esp32/
 │   └── main.py          # ESP32'ye yüklenecek (MicroPython)
 ├── pc/
-│   ├── doorbell.py      # Ana program (seri + yüz tanıma)
-│   ├── enroll.py        # Webcam ile tanıdık yüz ekleme aracı
+│   ├── doorbell.py          # Ana program (--test modu + seri + yüz tanıma)
+│   ├── enroll.py            # Webcam ile tanıdık yüz ekleme aracı
+│   ├── kurulum.ps1          # PC kurulum scripti (.venv + paketler)
+│   ├── dogrula_kurulum.py   # Kurulum doğrulama
 │   └── requirements.txt
 ├── known_faces/         # Tanıdık kişilerin fotoğrafları
 └── README.md
@@ -56,10 +60,12 @@ Ai Project/
 |-------|--------|-----|
 | 5V | ESP32 **5V (VIN)** | Halka 5V ister |
 | GND | ESP32 **GND** | Ortak toprak |
-| DI (Data In) | ESP32 **GPIO 6** | Doğrudan dene; titrerse seviye çevirici/4.x V besleme |
+| DI (Data In) | **330 Ω** → ESP32 **GPIO 6** | **Doğrudan** sür; titrerse halkayı 1N5819 diyot ile ~4.3 V besle |
 | DO (Data Out) | — | Boş kalsın (zincirleme için, gerekmez) |
 
-> Halka adreslenebilir RGB'dir → direnç gerekmez, tek data kablosu yeter.
+> ⚠️ WS2812B data hattını **BSS138 logic converter'dan GEÇİRME** — 800 kbps için
+> uygun değil, renkler bozulur. BSS138'i sadece HC-SR04 Echo için kullan.
+> Detay: `esp32s3_donanim_raporu.md` Bölüm 3.
 > `main.py` içinde `NUM_PIXELS` değerini halkandaki LED sayısına göre ayarla.
 
 ---
@@ -80,37 +86,32 @@ Ai Project/
 
 ---
 
-## 3) Bilgisayar Kurulumu (Python)
+## 3) Bilgisayar Kurulumu (Python) — Conda GEREKMEZ
 
-> `face_recognition` → `dlib`'e ihtiyaç duyar ve Windows'ta `pip install dlib`
-> bazen derleme hatası verir. **En kolay yol Conda:**
+> Python **3.10** + pip yeterli. `dlib`'i önceden derlenmiş (`dlib-bin`) kuruyoruz;
+> Visual Studio / derleme derdi YOK. Tek komutla kur:
 
-**Yöntem A — Conda (önerilen, en sorunsuz):**
 ```powershell
-# Miniconda kuruluysa:
-conda create -n kapizili python=3.10 -y
-conda activate kapizili
-conda install -c conda-forge dlib -y
-pip install opencv-python numpy pyserial face_recognition
+# Proje KÖK dizininde çalıştır:
+powershell -ExecutionPolicy Bypass -File pc\kurulum.ps1
 ```
+Bu script otomatik olarak `.venv` sanal ortamını oluşturur ve `dlib-bin`,
+`face_recognition`, `opencv`, `pyserial` vb. paketleri **doğru sırada** kurar.
 
-**Yöntem B — Saf pip (Conda yoksa):**
+Kurulumu doğrula:
 ```powershell
-py -3.10 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install dlib-bin          # önceden derlenmiş dlib (derleme derdi yok)
-pip install -r pc\requirements.txt
+.\.venv\Scripts\python.exe pc\dogrula_kurulum.py
 ```
-> `dlib-bin` çalışmazsa, "Visual Studio Build Tools (C++)" + CMake kurup
-> `pip install dlib` denenebilir. Takılırsan bana yaz, beraber çözeriz.
+> ℹ️ "dlib>=19.7 not installed" uyarısı **zararsızdır** (modülün adı `dlib`,
+> paketin adı `dlib-bin`). `import dlib` sorunsuz çalışır.
 
 ---
 
 ## 4) Tanıdık Yüzleri Ekle
 
+`known_faces/` boşken kameraya çıkan **herkes "yabancı"** sayılır. Önce kendini ekle:
 ```powershell
-cd pc
-python enroll.py ahmet     # kameraya bak, [s] ile kaydet
+.\.venv\Scripts\python.exe pc\enroll.py yakup    # kameraya bak, [s] ile kaydet
 ```
 veya `known_faces/` klasörüne elle `isim.jpg` koy.
 
@@ -118,12 +119,19 @@ veya `known_faces/` klasörüne elle `isim.jpg` koy.
 
 ## 5) Çalıştır
 
+### a) ESP32 OLMADAN test et (önce bunu dene)
 ```powershell
-# ESP32'nin COM portunu pc\doorbell.py içindeki PORT değişkenine yaz (ör. COM3)
-cd pc
-python doorbell.py
+.\.venv\Scripts\python.exe pc\doorbell.py --test
 ```
-Artık sensöre el/yüz yaklaştırınca → kamera kontrol eder → LED yanar. 🎉
+Canlı kamera açılır; **[SPACE]** → yüz kontrol (TANIDIK/YABANCI gösterir), **[q]** → çık.
+Donanım hazır olmadan PC tarafını tam test etmek için bunu kullan.
+
+### b) ESP32 ile (donanım hazır olunca)
+```powershell
+# ESP32'nin COM portunu argüman olarak ver (Aygıt Yöneticisi'nden bak):
+.\.venv\Scripts\python.exe pc\doorbell.py COM5
+```
+Artık sensöre yaklaşınca → kamera kontrol eder → LED yanar. 🎉
 
 ---
 
