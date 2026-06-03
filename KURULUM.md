@@ -40,7 +40,7 @@ Günlük kullanım (yüz ekleme, başlatma) için → **[KULLANIM.md](KULLANIM.m
 
 ### Yazılım
 - **Windows 10/11**
-- **Python 3.10** (kontrol: `py --list` → `-3.10-64` görünmeli)
+- **Python 3.10+** (kontrol: `python --version`)
 - Conda **gerekmez**.
 
 ---
@@ -65,7 +65,7 @@ powershell -ExecutionPolicy Bypass -File pc\kurulum.ps1
 ```
 
 Bu script:
-1. `.venv` adında bir **sanal ortam** oluşturur (Python 3.10),
+1. `.venv` adında bir **sanal ortam** oluşturur (sistemdeki Python ile),
 2. `dlib`'i **önceden derlenmiş** halde kurar (`dlib-bin` → Visual Studio/derleme derdi YOK),
 3. `face_recognition`, `opencv`, `pyserial` paketlerini kurar,
 4. ESP32 araçlarını (`esptool`, `mpremote`) kurar.

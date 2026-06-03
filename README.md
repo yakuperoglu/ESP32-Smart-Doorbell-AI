@@ -88,14 +88,14 @@ Ai Project/
 
 ## 3) Bilgisayar Kurulumu (Python) — Conda GEREKMEZ
 
-> Python **3.10** + pip yeterli. `dlib`'i önceden derlenmiş (`dlib-bin`) kuruyoruz;
+> Python **3.10+** ve pip yeterli. `dlib`'i önceden derlenmiş (`dlib-bin`) kuruyoruz;
 > Visual Studio / derleme derdi YOK. Tek komutla kur:
 
 ```powershell
 # Proje KÖK dizininde çalıştır:
 powershell -ExecutionPolicy Bypass -File pc\kurulum.ps1
 ```
-Bu script otomatik olarak `.venv` sanal ortamını oluşturur ve `dlib-bin`,
+Bu script otomatik olarak `.venv` sanal ortamını oluşturur (sistemdeki Python ile) ve `dlib-bin`,
 `face_recognition`, `opencv`, `pyserial` vb. paketleri **doğru sırada** kurar.
 
 Kurulumu doğrula:

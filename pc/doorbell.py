@@ -87,6 +87,7 @@ def grab_frame(cap):
         ret, frame = cap.read()
         if not ret:
             return None
+        frame = cv2.flip(frame, 1)
         time.sleep(0.02)
     return frame
 
@@ -139,6 +140,8 @@ def run_test_mode(known_encodings, known_names):
         ret, frame = cap.read()
         if not ret:
             break
+            
+        frame = cv2.flip(frame, 1)
 
         disp = frame.copy()
         cv2.putText(disp, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
@@ -207,6 +210,8 @@ def run_serial_mode(known_encodings, known_names):
     try:
         while True:
             ret, live = cap.read()
+            if ret:
+                live = cv2.flip(live, 1)
             now = time.time()
 
             # Ekran: sonuc bekletme suresindeysek donmus sonuc karesi,
